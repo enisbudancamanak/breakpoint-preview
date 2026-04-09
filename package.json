@@ -1,6 +1,6 @@
 {
   "name": "breakpoint-preview",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "See all breakpoints at once. Zero dependencies, works with any framework.",
   "license": "MIT",
   "author": "Enis Budancamanak",
