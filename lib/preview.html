@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Breakpoint Preview</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .toolbar {
+      position: fixed;
+      top: 12px;
+      right: 10px;
+      z-index: 1000;
+    }
+    .toolbar-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      transition: background 0.15s;
+    }
+    .toolbar-dot:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    .toolbar-dot i {
+      display: block;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.5);
+    }
+    .toolbar-popover {
+      display: none;
+      position: absolute;
+      top: 36px;
+      right: 0;
+      background: rgba(20, 20, 20, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 8px;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 140px;
+    }
+    .toolbar-popover.open { display: flex; }
+
+    .toolbar-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .btn {
+      font-size: 12px;
+      padding: 6px 12px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #1a1a1a;
+      color: #ccc;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn:hover { background: #252525; border-color: #444; }
+
+    .viewport-container {
+      flex: 1;
+      display: flex;
+      gap: 12px;
+      padding: 8px 12px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      align-items: stretch;
+    }
+
+    .viewport-frame {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: #141414;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      overflow: hidden;
+      transition: width 0.3s ease, opacity 0.3s ease;
+    }
+
+    .viewport-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #1a1a1a;
+      border-bottom: 1px solid #2a2a2a;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .viewport-label-width { font-weight: 600; color: #e0e0e0; }
+    .viewport-label-name { color: #666; }
+
+    .viewport-frame.disabled {
+      width: 48px !important;
+      opacity: 0.6;
+      cursor: pointer;
+    }
+    .viewport-frame.disabled iframe { display: none; }
+    .viewport-frame.disabled .viewport-label {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      padding: 12px 6px;
+      justify-content: center;
+      gap: 8px;
+      height: 100%;
+    }
+    .viewport-frame.disabled .viewport-label-right { display: none; }
+    .viewport-frame.disabled .viewport-url-input { display: none; }
+
+    .viewport-url-input {
+      flex: 1;
+      min-width: 0;
+      font-size: 11px;
+      font-family: monospace;
+      color: #555;
+      background: transparent;
+      border: none;
+      outline: none;
+      text-align: left;
+    }
+    .viewport-url-input:focus { color: #ddd; }
+
+    .viewport-frame iframe {
+      flex: 1;
+      border: none;
+      background: white;
+    }
+
+    .no-url {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px;
+    }
+    .no-url h2 { font-size: 20px; font-weight: 600; margin-bottom: 12px; color: #ccc; }
+    .no-url p { font-size: 14px; color: #666; line-height: 1.6; }
+    .no-url code { background: #1a1a1a; padding: 2px 8px; border-radius: 4px; font-size: 13px; color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="toolbar-dot" onclick="document.querySelector('.toolbar-popover').classList.toggle('open')"><i></i><i></i><i></i></div>
+    <div class="toolbar-popover">
+      <div class="toolbar-actions">
+        <button class="btn" onclick="refreshAll()">Refresh All</button>
+        <button class="btn" onclick="toggleScrollSync()" id="sync-btn">Sync Scroll: Off</button>
+        <button class="btn" onclick="toggleScale()" id="scale-btn">Scale: Off</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="viewport-container" id="viewports"></div>
+
+  <script>
+    var DEFAULT_BREAKPOINTS = [
+      { width: 375, name: 'Mobile' },
+      { width: 768, name: 'Tablet' },
+      { width: 1024, name: 'Laptop' },
+      { width: 1440, name: 'Desktop' },
+    ];
+
+    var BREAKPOINT_NAMES = {
+      320: 'Small Mobile', 375: 'Mobile', 390: 'Mobile', 414: 'Mobile L',
+      430: 'Mobile XL', 640: 'Small Tablet', 768: 'Tablet', 1024: 'Laptop',
+      1280: 'Desktop', 1440: 'Desktop L', 1920: 'Full HD', 2560: 'Ultra Wide',
+    };
+
+    var scaled = false;
+    var scrollSyncEnabled = false;
+
+    function getParams() {
+      var params = new URLSearchParams(window.location.search);
+      var url = params.get('url');
+      var bpParam = params.get('breakpoints');
+      var breakpoints;
+      if (bpParam) {
+        breakpoints = bpParam.split(',').map(function(w) {
+          var width = parseInt(w.trim(), 10);
+          return { width: width, name: BREAKPOINT_NAMES[width] || width + 'px' };
+        }).filter(function(bp) { return !isNaN(bp.width); });
+      } else {
+        breakpoints = DEFAULT_BREAKPOINTS;
+      }
+      return { url: url, breakpoints: breakpoints };
+    }
+
+    function renderViewports(url, breakpoints) {
+      var container = document.getElementById('viewports');
+
+      if (url && !/^https?:\/\//i.test(url)) {
+        container.innerHTML = '<div class="no-url"><div><h2>Invalid URL</h2><p>Only <code>http://</code> and <code>https://</code> URLs are supported.</p></div></div>';
+        return;
+      }
+      if (!url) {
+        container.innerHTML = '<div class="no-url"><div><h2>No URL</h2><p>Usage: <code>breakpoint-preview http://localhost:3000</code></p></div></div>';
+        return;
+      }
+
+      container.innerHTML = '';
+
+      breakpoints.forEach(function(bp) {
+        var frame = document.createElement('div');
+        frame.className = 'viewport-frame';
+        frame.style.width = (bp.width + 2) + 'px';
+
+        var label = document.createElement('div');
+        label.className = 'viewport-label';
+
+        var labelLeft = document.createElement('span');
+        labelLeft.innerHTML = '<span class="viewport-label-width">' + bp.width + 'px</span>';
+
+        var labelRight = document.createElement('span');
+        labelRight.className = 'viewport-label-right';
+        labelRight.style.cssText = 'display:flex;align-items:center;gap:8px';
+        labelRight.innerHTML = '<span class="viewport-label-name">' + bp.name + '</span>';
+
+        var isEnabled = sessionStorage.getItem('bp-disabled-' + bp.width) !== '1';
+
+        var hideBtn = document.createElement('button');
+        hideBtn.className = 'btn';
+        hideBtn.style.cssText = 'font-size:11px;padding:2px 8px;';
+        hideBtn.textContent = 'Hide';
+        hideBtn.onclick = function(e) {
+          e.stopPropagation();
+          frame.classList.add('disabled');
+          frame.dataset.origWidth = frame.style.width;
+          sessionStorage.setItem('bp-disabled-' + bp.width, '1');
+        };
+        labelRight.appendChild(hideBtn);
+
+        var urlInput = document.createElement('input');
+        urlInput.className = 'viewport-url-input';
+        urlInput.value = '/';
+        urlInput.spellcheck = false;
+        urlInput.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            var path = urlInput.value.startsWith('/') ? urlInput.value : '/' + urlInput.value;
+            iframe.src = url.replace(/\/$/, '') + path;
+            urlInput.blur();
+          }
+        });
+
+        label.appendChild(labelLeft);
+        label.appendChild(urlInput);
+        label.appendChild(labelRight);
+
+        frame.addEventListener('click', function() {
+          if (!frame.classList.contains('disabled')) return;
+          frame.classList.remove('disabled');
+          frame.style.width = frame.dataset.origWidth || (bp.width + 2) + 'px';
+          sessionStorage.setItem('bp-disabled-' + bp.width, '0');
+        });
+
+        var iframe = document.createElement('iframe');
+        var saved = sessionStorage.getItem('bp-iframe-' + bp.width);
+        iframe.src = saved || url;
+        iframe.style.width = bp.width + 'px';
+        iframe.setAttribute('loading', 'lazy');
+        iframe.dataset.bpWidth = bp.width;
+
+        iframe.addEventListener('load', function() {
+          try { urlInput.value = iframe.contentWindow.location.pathname; } catch(e) {}
+        });
+
+        if (!isEnabled) {
+          frame.classList.add('disabled');
+          frame.dataset.origWidth = frame.style.width;
+        }
+
+        frame.appendChild(label);
+        frame.appendChild(iframe);
+        container.appendChild(frame);
+      });
+    }
+
+    window.addEventListener('beforeunload', function() {
+      var iframes = document.querySelectorAll('.viewport-frame iframe');
+      iframes.forEach(function(iframe) {
+        try {
+          var p = iframe.contentWindow.location.pathname;
+          var base = iframe.src.split('/').slice(0, 3).join('/');
+          sessionStorage.setItem('bp-iframe-' + iframe.dataset.bpWidth, base + p);
+        } catch(e) {}
+      });
+    });
+
+    function refreshAll() {
+      document.querySelectorAll('.viewport-frame iframe').forEach(function(f) { f.src = f.src; });
+    }
+
+    function toggleScale() {
+      scaled = !scaled;
+      var btn = document.getElementById('scale-btn');
+      var frames = document.querySelectorAll('.viewport-frame');
+      var container = document.getElementById('viewports');
+      if (scaled) {
+        btn.textContent = 'Scale: On';
+        var cw = container.clientWidth;
+        var bp = getParams().breakpoints;
+        var tw = bp.reduce(function(s, b) { return s + b.width + 18; }, 0);
+        var sf = Math.min(1, cw / tw);
+        frames.forEach(function(f) { f.style.transform = 'scale(' + sf + ')'; f.style.transformOrigin = 'top left'; });
+      } else {
+        btn.textContent = 'Scale: Off';
+        frames.forEach(function(f) { f.style.transform = ''; });
+      }
+    }
+
+    function updateSyncBtn(id, enabled, label) {
+      var btn = document.getElementById(id);
+      btn.textContent = label + (enabled ? ': On' : ': Off');
+      btn.style.background = enabled ? '#1a3a1a' : '#1a1a1a';
+      btn.style.borderColor = enabled ? '#2a5a2a' : '#333';
+      btn.style.color = enabled ? '#6d6' : '#ccc';
+    }
+
+    function toggleScrollSync() {
+      scrollSyncEnabled = !scrollSyncEnabled;
+      updateSyncBtn('sync-btn', scrollSyncEnabled, 'Sync Scroll');
+    }
+
+    window.addEventListener('message', function(e) {
+      if (!scrollSyncEnabled || !e.data || e.data.type !== 'bp-scroll') return;
+      document.querySelectorAll('.viewport-frame iframe').forEach(function(iframe) {
+        if (iframe.contentWindow === e.source) return;
+        iframe.contentWindow.postMessage({ type: 'bp-scroll-set', ratio: e.data.ratio }, '*');
+      });
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.toolbar')) {
+        document.querySelector('.toolbar-popover').classList.remove('open');
+      }
+    });
+
+    var p = getParams();
+    renderViewports(p.url, p.breakpoints);
+  </script>
+</body>
+</html>

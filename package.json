@@ -1,0 +1,32 @@
+{
+  "name": "breakpoint-preview",
+  "version": "1.0.0",
+  "description": "See all breakpoints at once. Zero dependencies, works with any framework.",
+  "license": "MIT",
+  "author": "Enis Budancamanak",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enisbudancamanak/breakpoint-preview"
+  },
+  "keywords": [
+    "responsive",
+    "breakpoints",
+    "preview",
+    "mobile",
+    "tablet",
+    "desktop",
+    "viewport",
+    "devtools",
+    "css"
+  ],
+  "bin": {
+    "breakpoint-preview": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "lib/"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}
